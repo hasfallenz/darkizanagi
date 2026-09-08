@@ -1,0 +1,561 @@
+---
+title: "Membangun Havenso Cafe: Ekosistem F&B Modern Berbasis Multi-Panel dengan Metodologi Waterfall, Integrasi Hermes AI Agent, dan Arsitektur Keamanan Berlapis"
+description: "Catatan teknis mengenai proses membangun Havenso Cafe, mulai dari metodologi Waterfall, tech stack, multi-panel architecture, Hermes AI Agent, hingga security architecture."
+date: "2026-09-07"
+category: "Project Case Study"
+tags:
+  - Next.js
+  - TypeScript
+  - AI Agent
+  - Hermes AI
+  - Groq
+  - SQLite
+  - Prisma
+  - System Architecture
+  - Security
+  - F&B Technology
+  - Cloud VPS
+featured: true
+cover: "/images/havenso/panelcustomer.png"
+---
+
+Dalam industri **Food & Beverage (F&B)** modern, efisiensi operasional bukan lagi sekadar pilihan atau nilai tambah—melainkan fondasi utama dalam menjaga kelangsungan dan reputasi bisnis. 
+
+Sebuah kafe mungkin memiliki racikan biji kopi terbaik dan resep hidangan istimewa, namun operasional harian tetap dapat lumpuh akibat gesekan-gesekan sistemik: pesanan meja tamu yang salah catat, antrean dapur (KDS) yang tercecer, kehabisan stok susu atau biji kopi di jam sibuk tanpa peringatan dini, hingga pemilik (*owner*) yang kesulitan mengakses data performa riil tanpa menunggu rekapitulasi manual di akhir bulan.
+
+Dari rangkaian permasalahan nyata di lapangan tersebut, saya merancang dan membangun **Havenso Cafe**.
+
+Havenso Cafe adalah sistem operasional kafe terintegrasi berbasis web multi-panel yang menghubungkan seluruh pemangku kepentingan dalam satu ekosistem terpadu. Lebih dari sekadar aplikasi kasir atau POS konvensional, Havenso dilengkapi dengan **Hermes AI**—sebuah *autonomous agentic engine* yang tidak hanya bertindak sebagai chatbot analitis, melainkan memiliki kapabilitas otonom untuk mengeksekusi instruksi inventori langsung ke basis data dengan standar validasi dan keamanan data yang ketat.
+
+Tulisan ini merupakan catatan teknis (*engineering case study*) mendalam yang mendokumentasikan keputusan arsitektur, metodologi rekayasa perangkat lunak, pertimbangan keamanan data, integrasi LLM gateway, hingga strategi infrastruktur produksi.
+
+---
+
+## 1. Metode Pengembangan: Mengapa Waterfall?
+
+Dalam tren rekayasa perangkat lunak modern, metodologi *Agile* kerap dianggap sebagai pendekatan standar tanpa tanding. Namun untuk sistem seperti Havenso Cafe, saya secara sadar memilih model **Waterfall (Classic Life Cycle)** yang terstruktur dan sekuensial.
+
+Keputusan ini didasari oleh karakteristik sistem yang melibatkan lima aktor berbeda:
+
+```text
+Customer  ───►  Kitchen  ───►  Staff  ───►  Management  ───►  Owner
+```
+
+Masing-masing aktor memiliki batasan tanggung jawab (*role boundary*), hak akses data (*authorization boundary*), dan alur kerja (*workflow*) yang saling mengunci. Jika batas entitas dan relasi basis data berubah-ubah di tengah jalan tanpa spesifikasi tertulis yang matang, integritas transaksi keuangan dan audit log inventori akan rentan mengalami kebocoran logika.
+
+```text
+  ┌───────────────────────────────────┐
+  │ 1. Requirement Analysis           │
+  └─────────────────┬─────────────────┘
+                    ▼
+  ┌───────────────────────────────────┐
+  │ 2. System & Database Design       │
+  └─────────────────┬─────────────────┘
+                    ▼
+  ┌───────────────────────────────────┐
+  │ 3. Implementation (Full-Stack)    │
+  └─────────────────┬─────────────────┘
+                    ▼
+  ┌───────────────────────────────────┐
+  │ 4. Verification & E2E Testing     │
+  └─────────────────┬─────────────────┘
+                    ▼
+  ┌───────────────────────────────────┐
+  │ 5. Deployment & Hardening         │
+  └───────────────────────────────────┘
+```
+
+### Requirement Analysis (Analisis Kebutuhan)
+Pada fase pertama, setiap aktor dipetakan ke dalam use case spesifik:
+- **Customer**: Akses menu instan via scan QR meja tanpa wajib login, kustomisasi varian pesanan (*less sugar*, *extra shot*), kalkulasi subtotal otomatis termasuk PPN, dan mekanisme pemanggilan bantuan staf via tiket meja.
+- **Kitchen (KDS)**: Antrean tiket pesanan real-time tanpa kertas (*paperless*), pengelompokan berdasarkan meja, pembaruan status bertahap (*Pending* → *Brewing/Cooking* → *Ready*), dan notifikasi suara/visual saat pesanan masuk.
+- **Staff**: Antarmuka cepat untuk mencatat perubahan stok fisik harian (*Stock In* / *Stock Out*), verifikasi *stock opname*, dan konfirmasi bantuan meja pelanggan.
+- **Management**: Dasbor metrik finansial, pergerakan tren mingguan, analisis *Average Order Value* (AOV), serta batas minimum restock bahan baku (*reorder threshold*).
+- **Owner**: Asisten cerdas terintegrasi (Hermes AI) untuk pemantauan berbasis bahasa alami, ringkasan performa finansial, serta eksekusi perubahan inventori tanpa membuka tabel teknis.
+
+### System & Database Design
+Skema data dirancang menggunakan relasi ketat antar entitas relasional:
+- `MenuItem` & `Category`: Katalog produk dan variasi harga.
+- `Order` & `OrderItem`: Jejak pesanan terikat konteks meja dan timestamp.
+- `Table`: Konfigurasi identitas meja fisik dan status sesi aktif.
+- `InventoryItem`: Inventaris bahan mentah (gram, ml, pcs) dengan ambang batas minimum.
+- `SupportTicket`: Antrean panggilan bantuan staf dari pelanggan.
+- `AuditLog`: Rekam jejak abadi yang mencatat siapa, kapan, dan perubahan kuantitas apa yang terjadi.
+
+Di samping skema relasional, fase desain ini merumuskan **arsitektur agen AI**: mendefinisikan *system prompt*, batas eksekusi *tool calling*, skema argumen JSON, serta *deterministic fallback engine* jika layanan inferensi cloud mengalami kendala jaringan.
+
+### Implementation
+Pengembangan dilakukan secara monolitik modular menggunakan **Next.js App Router**, **TypeScript** bertipe ketat, **Server Actions**, dan integrasi **Groq LPU Gateway** untuk latensi inferensi sub-detik.
+
+### Integration & Testing
+Pengujian dilakukan secara *End-to-End* (E2E) untuk memvalidasi siklus penuh transaksi:
+
+```text
+Customer scan QR & order di Meja A1
+             │
+             ▼
+Kitchen menerima tiket secara real-time
+             │
+             ▼
+Kitchen menyelesaikan hidangan & mengubah status
+             │
+             ▼
+Stok bahan terpotong otomatis dari Inventory
+             │
+             ▼
+Staff melakukan stock opname fisik
+             │
+             ▼
+Owner menanyakan status stok via Hermes AI
+             │
+             ▼
+Hermes mengeksekusi penambahan stok bahan
+```
+
+### Deployment & Maintenance
+Sistem dideploy pada server **Linux Cloud VPS** (Ubuntu/Debian LTS) mandiri dengan manajemen proses **PM2**, reverse proxy **Nginx**, port SSH non-standar (Port 4422), serta isolasi variabel lingkungan (*environment variable isolation*).
+
+---
+
+## 2. Bedah Tech Stack Havenso
+
+Pemilihan teknologi untuk Havenso Cafe didasarkan pada prinsip keandalan (*reliability*), kecepatan eksekusi, kesederhanaan pemeliharaan, serta performa inferensi AI:
+
+| Layer | Teknologi Terpilih | Alasan Rekayasa & Pertimbangan Teknis |
+| :--- | :--- | :--- |
+| **Full-Stack Framework** | Next.js 15+ App Router | Arsitektur hybrid dengan Server Components untuk efisiensi render dan Server Actions untuk mutasi data aman |
+| **Language** | TypeScript | Menjamin type safety end-to-end dari skema basis data hingga props UI |
+| **Styling & UI** | Tailwind CSS + Lucide Icons | Utilitas CSS deterministik, konsistensi tema, dan zero-runtime overhead |
+| **Database & ORM** | SQLite + Prisma ORM | Basis data relasional berbasis file yang sangat cepat untuk deployment single-node, minim overhead koneksi soket, dipadu queries bertipe aman |
+| **AI / Agentic Engine** | Groq LPU + GPT-OSS-120B / Qwen 3.6 27B | Eksekusi inferensi ultra-rendah latensi (sub-300ms) untuk interaksi natural language real-time |
+| **Process Manager** | PM2 | Menjamin continuous execution, auto-restart on crash, dan persistent boot startup |
+| **Infrastructure** | Cloud VPS Linux (Debian/Ubuntu) | Kontrol penuh atas port jaringan, firewall rules, isolasi memori, dan konfigurasi reverse proxy Nginx |
+
+<Callout type="info">
+  <strong>Catatan Arsitektur:</strong> Tabel di atas menjelaskan tech stack yang digunakan pada sistem <strong>Havenso Cafe</strong>. Blog tempat Anda membaca artikel ini sendiri dibangun menggunakan arsitektur statis murni: <code>Next.js</code>, <code>TypeScript</code>, <code>Tailwind CSS</code>, <code>MDX</code>, dan di-deploy secara serverless di <code>Vercel</code>.
+</Callout>
+
+---
+
+## 3. Arsitektur Multi-Panel & Peran Agent
+
+Havenso Cafe memecah kompleksitas operasional menjadi antarmuka peran spesifik (*role-specialized interfaces*). Seluruh panel berada dalam satu basis kode Next.js terintegrasi, namun dipisahkan oleh proteksi rute dan validasi sesi.
+
+```text
+                           HAVENSO CAFE SYSTEM
+                                    │
+        ┌───────────────────────────┼───────────────────────────┐
+        │                           │                           │
+  Customer Panel             Kitchen KDS Panel             Staff Panel
+  (Table QR Ordering)        (Real-Time Prep Queue)        (Stock In / Stock Out)
+        │                           │                           │
+        └───────────────────────────┼───────────────────────────┘
+                                    │
+                         Management Dashboard
+                         (Analytics & Inventory)
+                                    │
+                         Owner Command Center
+                                    │
+                          Hermes AI Agent Engine
+                          (Autonomous Brain & Hands)
+```
+
+
+---
+
+## 4. Customer Panel
+
+Dapat diakses langsung oleh pelanggan melalui rute:
+```text
+/customer?table=A1
+```
+
+Panel pelanggan dirancang seringan mungkin tanpa membebani browser perangkat seluler pelanggan dengan pustaka JavaScript yang berat.
+
+<Figure
+  src="/images/havenso/panelcustomer.png"
+  alt="Havenso Cafe Customer Panel"
+  caption="Customer Panel — antarmuka pemesanan meja digital yang responsif via scan QR code."
+/>
+
+### Digital Catalog & Filtering
+Menu diklasifikasikan ke dalam kategori logis: *Coffee*, *Non-Coffee*, *Pastry*, dan *Main Food*. Status ketersediaan menu (*In Stock* vs *Out of Stock*) disinkronisasi langsung dari database. Menu yang kehabisan bahan baku otomatis dinonaktifkan dari pemesanan.
+
+### Order Cart & Customization
+Pelanggan dapat menentukan catatan kustomisasi untuk setiap item:
+- Tingkat kemanisan (*Normal*, *Less Sugar*, *No Sugar*)
+- Es batu (*Normal Ice*, *Extra Ice*, *No Ice*)
+- Opsi susu (*Fresh Milk*, *Oat Milk*, *Almond Milk*)
+
+Keranjang belanja secara instan menghitung subtotal, rincian PPN (11%), dan mengirimkan pesanan ke backend via Server Action yang terikat secara kriptografis pada identitas meja fisik.
+
+### Support Ticket Call
+Jika pelanggan membutuhkan bantuan (misal: sendok tambahan, tisu, atau bantuan pembayaran tunai), tombol *Call Staff* akan membuat entri `SupportTicket` yang langsung memicu peringatan di panel staf.
+
+---
+
+## 5. Kitchen / KDS (Kitchen Display System) Panel
+
+Dapat diakses pada stasiun dapur dan bar:
+```text
+/kitchen
+```
+
+Sebelum adanya KDS, komunikasi antara kasir dan barista bergantung pada struk kertas cetak yang rentan basah, hilang, atau tertukar. KDS Havenso meniadakan kertas secara total (*paperless*).
+
+<Figure
+  src="/images/havenso/panelkitchen.png"
+  alt="Havenso Cafe Kitchen Panel KDS"
+  caption="Kitchen Display System (KDS) — visualisasi antrean pesanan dapur secara real-time tanpa kertas struk."
+/>
+
+### Antrean Tiket Real-Time
+Setiap pesanan yang disubmit oleh pelanggan akan langsung masuk ke antrean KDS dengan indikator visual waktu tunggu:
+- **Pending**: Pesanan baru masuk, belum disentuh staf dapur.
+- **Cooking / Brewing**: Staf mulai meracik hidangan atau menyeduh kopi.
+- **Ready to Serve**: Hidangan selesai dipersiapkan, memicu notifikasi kepada staf pelayan untuk mengantarkan pesanan ke nomor meja target.
+- **Completed**: Pesanan telah tersaji di meja tamu.
+
+Setiap tiket menampilkan rincian kustomisasi item secara kontras sehingga kesalahan racikan (*wrong recipe*) dapat ditekan hingga titik terendah.
+
+---
+
+## 6. Staff Panel
+
+Dapat diakses oleh staf operasional:
+```text
+/staff
+```
+
+Panel ini dirancang khusus untuk kecepatan input fisik di lantai operasional tanpa memerlukan navigasi menu yang berbelit-belit.
+
+<Figure
+  src="/images/havenso/panelstaff.png"
+  alt="Havenso Cafe Staff Panel"
+  caption="Staff Panel — antarmuka ringkas untuk pencatatan pergerakan bahan baku masuk dan keluar serta opname fisik."
+/>
+
+### Quick Stock In / Out
+Pergerakan bahan baku sering kali terjadi dalam hitungan detik. Ketika seorang staf membuka kemasan susu segar baru dari kulkas penyimpanan, staf cukup menekan pintasan:
+
+```text
+[Bahan: Susu Segar Full Cream]
+Stok Awal: 20 Liter
+Tindakan: [Stock Out] 3 Liter
+Hasil Akhir: 17 Liter
+Keterangan: Digunakan untuk station espresso pagi
+```
+
+### Audit Log Logging
+Setiap klik pada tombol mutasi stok tidak sekadar mengubah angka di tabel `InventoryItem`, melainkan menciptakan entri permanen pada tabel `AuditLog`:
+
+```typescript
+interface StockMutationPayload {
+  inventoryItemId: string;
+  actor: "STAFF" | "MANAGEMENT" | "HERMES_AGENT";
+  actionType: "STOCK_IN" | "STOCK_OUT" | "CORRECTION";
+  quantityChange: number;
+  previousQuantity: number;
+  newQuantity: number;
+  reason: string;
+  timestamp: Date;
+}
+```
+
+Hal ini menjamin transparansi penuh ketika terjadi selisih stok saat *closing shift*.
+
+---
+
+## 7. Management Panel
+
+Dapat diakses oleh manajer operasional dan supervisor:
+```text
+/management
+```
+
+Panel manajemen menyatukan data operasional makro dan mikro ke dalam satu dasbor analitis yang komprehensif.
+
+<Figure
+  src="/images/havenso/panelmanagement.png"
+  alt="Havenso Cafe Management Panel"
+  caption="Management Panel — dasbor agregasi performa omset, tren pesanan, kontrol ketersediaan menu, dan ambang batas stok."
+/>
+
+Fitur utama yang disediakan mencakup:
+- **Daily Revenue & Weekly Trend**: Agregasi pendapatan harian, volume transaksi, dan perbandingan performa *week-over-week*.
+- **Table Occupancy & AOV**: Mengetahui utilisasi meja aktif serta rata-rata nilai transaksi per pelanggan (*Average Order Value*).
+- **Master Inventory Control**: Menyetel ambang batas peringatan (*reorder threshold*). Jika stok biji kopi House Blend menyentuh di bawah 2.000 gram, sistem otomatis menandai status bahaya pada dasbor.
+- **Activity & Shift Monitor**: Memantau ritme kerja dan log pencatatan staf di lapangan.
+
+---
+
+## 8. Owner Panel & Hermes AI — Brain & Hands
+
+Rute operasional tertinggi Havenso Cafe:
+```text
+/owner
+```
+
+Bagi seorang pemilik bisnis (*owner*), membuka puluhan tabel spreadsheet atau memeriksa dasbor analitik yang penuh angka sering kali melelahkan. Pemilik membutuhkan jawaban lugas dan tindakan cepat.
+
+Di sinilah **Hermes AI** mengambil peran.
+
+<Figure
+  src="/images/havenso/panelowner.png"
+  alt="Havenso Cafe Owner Command Center"
+  caption="Owner Command Center — antarmuka eksekutif dengan integrasi dialogis Hermes AI Agent."
+/>
+
+### Hermes sebagai "Brain" (Analitis Berbasis Ground-Truth)
+Berbeda dengan chatbot generik yang hanya menghafal teks pelatihan statis, Hermes diberikan injeksi konteks *ground-truth* dari database real-time sebelum menghasilkan jawaban.
+
+Ketika Owner bertanya:
+> *"Ada lagi stok yang menipis hari ini?"*
+
+Hermes tidak mengira-ngira. Agen secara otonom memfilter tabel `InventoryItem` dengan kueri `quantity <= minThreshold`, membandingkan selisih kebutuhan, dan memberikan jawaban akurat:
+
+> *"Ada 2 bahan yang saat ini berada di bawah batas aman: **Susu UHT** tersisa **2 Liter** (batas minimum 5 Liter) dan **Biji Kopi Gayo** tersisa **400 gram** (batas minimum 1.000 gram). Dapur berpotensi kekurangan susu menjelang peak hour sore ini."*
+
+---
+
+## 9. Hermes sebagai "Hands" (Otonomi Eksekusi Database)
+
+Kelebihan utama Hermes AI yang membedakannya dari sistem LLM pasif adalah perannya sebagai **"Hands"**—kemampuan mengeksekusi aksi nyata ke dalam sistem.
+
+Ketika Owner memberikan perintah percakapan:
+> *"Tambah stok beras 5kg dan daftarkan bahan baru saus mentai 10 botol."*
+
+Alur kerja otonom yang berlangsung di balik layar:
+
+```text
+Perintah Natural Language dari Owner
+                │
+                ▼
+1. Intent Classification & Parsing (Groq LPU Gateway)
+                │
+                ▼
+2. Parameter Extraction (Name: "Beras", Quantity: 5, Unit: "kg")
+                │
+                ▼
+3. Strict Safety Validation & Guardrails Check
+                │
+                ▼
+4. Database Tool / Function Call Execution (Prisma ORM)
+                │
+                ▼
+5. Audit Log Injection (Actor: HERMES_AGENT)
+                │
+                ▼
+6. Verification & Human-Readable Confirmation
+```
+
+<Callout type="warning">
+  <strong>Prinsip Ketat Eksekusi Agen:</strong> Hermes tidak pernah sekadar "mengatakan" bahwa tindakan telah dilakukan. Tanggapan agen hanya dikirimkan ke antarmuka setelah fungsi mutasi Prisma ORM berhasil melakukan <code>commit</code> pada database dan mengembalikan ID transaksi yang valid.
+</Callout>
+
+Contoh implementasi registrasi *Tool Calling* yang dikawal ketat:
+
+```typescript
+// Definisi function call yang diizinkan untuk Hermes AI
+export const hermesToolDefinitions = [
+  {
+    name: "mutate_inventory_stock",
+    description: "Menambah atau mengurangi kuantitas bahan baku yang telah terdaftar di database.",
+    parameters: {
+      type: "object",
+      properties: {
+        itemName: { type: "string", description: "Nama bahan baku persis di inventori" },
+        amount: { type: "number", description: "Nilai penambahan (positif) atau pengurangan (negatif)" },
+        unit: { type: "string", enum: ["kg", "gram", "liter", "ml", "pcs", "botol"] },
+        reason: { type: "string", description: "Alasan perubahan stok dari owner" }
+      },
+      required: ["itemName", "amount", "unit"]
+    }
+  }
+];
+```
+
+---
+
+## 10. Arsitektur Keamanan: Defense-in-Depth
+
+Membangun sistem yang melibatkan pembayaran, kontrol inventori fisik, serta agen kecerdasan buatan yang memiliki akses tulis (*write access*) ke database menuntut standar keamanan tingkat tinggi. Di Havenso Cafe, saya mengimplementasikan strategi **Defense-in-Depth** dengan lima pilar keamanan:
+
+
+### 1. Strict Role-Based Access Control (RBAC)
+Pemisahan hak akses diterapkan secara absolut di tingkat middleware dan server route:
+- Pelanggan (*Customer*) hanya memiliki hak baca atas menu dan hak buat atas keranjang mejanya sendiri. Sesi pelanggan diisolasi menggunakan token meja jangka pendek.
+- Pelanggan tidak memiliki jalur API apa pun ke metrik finansial, data gudang, atau endpoint Hermes AI.
+- Staf operasional tidak memiliki akses untuk menghapus riwayat log transaksi atau mengubah master harga menu.
+- Endpoint mutasi inventori Hermes hanya dapat dipanggil dari sesi terverifikasi Owner.
+
+### 2. SQL Injection & Database Integrity via Prisma ORM
+Seluruh interaksi basis data dilakukan melalui abstraksi **Prisma ORM**. Prisma secara default menggunakan *parameterized queries* dan *prepared statements* pada driver SQLite. 
+
+> *Pendekatan ini secara signifikan mengurangi risiko SQL injection klasik dibandingkan membangun query melalui string concatenation langsung.*
+
+Integritas referensial diperkuat dengan konstrain *foreign key*, tipe data numerik ketat, dan validasi skema runtime menggunakan pustaka *Zod*.
+
+### 3. Audit Trail Permanen (Non-Repudiation)
+Setiap mutasi stok bahan—baik yang dipicu oleh staf di panel inventori maupun yang dieksekusi secara otomatis oleh Hermes AI—wajib menghasilkan baris baru pada tabel `AuditLog`. Baris ini bersifat *append-only* (tidak dapat diubah atau dihapus melalui UI aplikasi):
+
+| Log ID | Timestamp | Aktor | Aksi | Bahan | Nilai Awal | Mutasi | Nilai Akhir | Alasan |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `log_8921` | 07/09 08:30 | `STAFF_02` | `STOCK_OUT` | Susu UHT | 12 Liter | -3 Liter | 9 Liter | Pemakaian Bar |
+| `log_8922` | 07/09 09:15 | `HERMES_AGENT` | `STOCK_IN` | Biji Kopi Gayo | 400 gram | +2.000 g | 2.400 g | Restock Perintah Owner |
+| `log_8923` | 07/09 11:45 | `OWNER_DIRECT`| `CORRECTION` | Saus Mentai | 0 botol | +10 btl | 10 botol | Penerimaan Supplier |
+
+### 4. AI Safety & Input Guardrails
+Memberikan akses mutasi basis data kepada LLM tanpa pagar pembatas (*guardrails*) adalah resep bencana. Tiga lapisan validasi ketat diterapkan sebelum argumen function call dieksekusi:
+
+#### Ground-Truth Data Injection
+Hermes tidak diizinkan membuat asumsi mengenai ketersediaan nama bahan baku. Agen selalu menerima daftar nama bahan baku terdaftar saat ini sebagai konteks terstruktur.
+
+#### Daftar Hitam Kata Ambigu (`FORBIDDEN_MATERIAL_NAMES`)
+Untuk mencegah percakapan santai owner salah diterjemahkan sebagai nama bahan baru, sistem memberlakukan blokir daftar hitam:
+```typescript
+export const FORBIDDEN_MATERIAL_NAMES = new Set([
+  "tolong", "stok", "bahan", "menu", "kafe", "havenso", 
+  "semuanya", "barang", "database", "admin", "ai", "hermes"
+]);
+```
+Jika model mencoba memanggil `register_new_material` dengan nama yang tercantum di atas, eksekusi otomatis digugurkan sebelum menyentuh database.
+
+#### Normalisasi Satuan & Batasan Nilai
+Kuantitas bahan baku wajib berupa bilangan numerik riil di atas angka 0 (`quantity > 0`). Satuan wajib dicocokkan dengan enum yang valid (`kg`, `gram`, `liter`, `ml`, `pcs`, `botol`).
+
+#### Reasoning Sanitization
+Pada model-model inferensi yang memiliki proses pemikiran internal (seperti tag `<think>...</think>`), backend Havenso secara otomatis membersihkan blok reasoning tersebut menggunakan regex sebelum teks konfirmasi dikembalikan kepada pengguna:
+
+```typescript
+export function sanitizeAgentResponse(rawText: string): string {
+  return rawText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+}
+```
+
+### 5. Pengerasan Server VPS (Linux Infrastructure Hardening)
+Di tingkat infrastruktur:
+- **Port SSH Kustom (Port 4422)**: Server VPS dikonfigurasi untuk tidak mendengarkan port default 22. Hal ini secara signifikan mereduksi kebisingan serangan *automated brute-force scanning* botnet internet.
+- **Isolasi Variabel Lingkungan**: Nilai sensitif seperti `GROQ_API_KEY`, `SESSION_SECRET`, dan token enkripsi disimpan strictly di sisi server (`.env.production.local`) dan tidak pernah dikompilasi ke dalam bundle client Next.js.
+- **Reverse Proxy Nginx & Rate Limiting**: Nginx mengarahkan lalu lintas HTTPS publik ke port lokal Next.js dengan batasan laju request (*rate-limiting*) untuk menangkal percobaan *denial-of-service*.
+- **PM2 Process Manager**: Menjaga aplikasi tetap aktif secara persisten, mengelola alokasi memori cluster, serta otomatis me-restart proses jika terjadi kegagalan memori tak terduga.
+
+---
+
+## 11. Deterministic Fallback Engine
+
+Ketergantungan 100% pada penyedia kecerdasan buatan berbasis cloud (*cloud AI provider*) adalah titik lemah arsitektural (*single point of failure*). Koneksi internet dapat terputus, atau API gateway pihak ketiga dapat mengalami lonjakan *rate-limit* atau *outage*.
+
+Oleh karena itu, Havenso Cafe dirancang dengan **Deterministic Fallback Engine**:
+
+```text
+Input Pengguna: "stok susu?"
+             │
+             ▼
+[Deteksi Pola Kueri Deterministik]
+             │
+    ┌────────┴────────┐
+    ▼                 ▼
+[Cloud AI Online]   [Cloud AI Offline / Error]
+    │                 │
+LLM Inference         Fallback Regex Matcher
+    │                 │
+    └────────┬────────┘
+             ▼
+Eksekusi Database Langsung:
+`prisma.inventoryItem.findMany({ where: { name: { contains: 'susu' } } })`
+             │
+             ▼
+Respons Format Instan:
+"Stok Susu UHT saat ini: 9 Liter (Batas Minimum: 5 Liter)."
+```
+
+<Callout type="tip">
+  <strong>Prinsip Resiliensi:</strong> Fallback deterministik tidak berusaha menggantikan kapasitas penalaran kompleks Hermes AI. Tugasnya adalah memastikan bahwa kueri inventori dan informasi operasional paling kritis tetap dapat diakses oleh staf dan owner meskipun penyedia AI eksternal sedang mengalami gangguan total.
+</Callout>
+
+---
+
+## 12. End-to-End System Flow
+
+Berikut visualisasi aliran data lengkap dari awal hingga akhir, menggambarkan bagaimana seluruh komponen saling berinteraksi secara mulus:
+
+```text
+[ 1. Customer ]  ──► Scan QR Meja A1 & Kirim Pesanan Kopi + Toast
+                           │
+                           ▼
+[ 2. Database ]  ──► Order Created & Validated (Status: Pending)
+                           │
+                           ▼
+[ 3. Kitchen ]   ──► Layar KDS Berbunyi, Barista Mulai Meracik
+                           │
+                           ▼
+[ 4. Kitchen ]   ──► Status Diubah Menjadi 'Ready to Serve'
+                           │
+                           ▼
+[ 5. Staff ]     ──► Mengantarkan Hidangan ke Meja A1, Status 'Completed'
+                           │
+                           ▼
+[ 6. Inventory ] ──► Pengurangan Otomatis Bahan Terkait (Biji Kopi, Susu, Roti)
+                           │
+                           ▼
+[ 7. Management] ──► Dasbor Mengupdate Omset & Menghitung Sisa Bahan
+                           │
+                           ▼
+[ 8. Owner ]     ──► Bertanya ke Hermes: "Gimana kondisi stok hari ini?"
+                           │
+                           ▼
+[ 9. Hermes AI ] ──► Menganalisis Data Riil & Menyarankan Penambahan Stok
+                           │
+                           ▼
+[ 10. Action ]   ──► Owner Menyetujui, Hermes Mengeksekusi Restock ke Database
+```
+
+---
+
+## 13. Pelajaran Berharga (Key Takeaways)
+
+Membangun ekosistem Havenso Cafe dari tahap analisis kebutuhan hingga tahap deployment mandiri di VPS memberikan empat wawasan rekayasa penting:
+
+### 1. AI Harus Punya Konteks Lapangan (*Ground-Truth*)
+Model bahasa sebesar apa pun tidak akan berguna di ranah bisnis spesifik jika tidak memiliki akses terhadap realitas operasional riil. Menghubungkan AI dengan *live database* melalui *retrieval* dan *tool calling* terstruktur jauh lebih berharga daripada melatih model dari awal.
+
+### 2. Autonomous Execution Membutuhkan Pertahanan Keamanan Ekstra
+Ketika Anda memberi izin kepada AI untuk melakukan mutasi data (*write privilege*), Anda tidak boleh mempercayai keluarannya begitu saja. *Input guardrails*, validasi skema Zod, isolasi peran pengguna, dan pencatatan *audit log* bukan lagi pelengkap, melainkan prasyarat mutlak.
+
+### 3. Jangan Bergantung 100% pada Cloud AI
+Sistem operasional fisik seperti kafe tidak boleh berhenti hanya karena server penyedia AI di belahan dunia lain sedang *down*. Desain *fallback engine* deterministik memastikan bisnis fisik tetap berputar tanpa hambatan.
+
+### 4. Pemisahan Peran Membentuk Pengalaman Pengguna (UX) Terbaik
+Antarmuka pelanggan harus fokus pada kecepatan dan kejelasan visual pemesanan. Antarmuka dapur harus fokus pada keterbacaan antrean tanpa distraksi. Antarmuka staf harus fokus pada kecepatan input jari. Menyatukan semuanya ke dalam satu panel serbaguna hanya akan membingungkan pengguna di lapangan.
+
+---
+
+## 14. Penutup
+
+> *"Membangun Havenso Cafe mengajarkan saya bahwa integrasi AI di dunia nyata bukan sekadar membuat chatbot untuk menyapa tamu, melainkan membangun agen otonom yang memahami konteks bisnis, menghormati data riil, dilindungi oleh sistem keamanan yang kokoh, dan mampu menjadi perpanjangan tangan pemilik usaha dalam mengambil keputusan harian."*
+
+```text
+Memahami Konteks Bisnis
+          │
+          ▼
+Mengakses Ground-Truth Data
+          │
+          ▼
+Penalaran Otonom (Reasoning)
+          │
+          ▼
+Penggunaan Tools Terdefinisi
+          │
+          ▼
+Eksekusi Mutasi Database
+          │
+          ▼
+Verifikasi Hasil & Audit Trail
+```
+
+Havenso Cafe menjadi laboratorium rekayasa saya dalam memadukan **Full-Stack Development, Database Relasional, System Architecture, AI Agentics, Otomasi Proses, dan Cloud Infrastructure** ke dalam satu kesatuan sistem yang berupaya memecahkan permasalahan operasional nyata.
+
+---
+
+Tertarik mendiskusikan arsitektur sistem ini, implementasi keamanan AI agent, atau praktik rekayasa perangkat lunak lebih lanjut? Jangan ragu untuk [menghubungi saya](/contact) atau menelusuri repositori proyek lainnya di [halaman projects](/projects).
