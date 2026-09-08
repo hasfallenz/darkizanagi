@@ -57,6 +57,14 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  icons: {
+    icon: [
+      { url: "/favicon-kiza.png" },
+      { url: "/favicon-kiza.png", sizes: "32x32", type: "image/png" },
+    ],
+    shortcut: "/favicon-kiza.png",
+    apple: "/favicon-kiza.png",
+  },
 };
 
 export const viewport = {
