@@ -15,6 +15,7 @@ tags:
   - Security
   - F&B Technology
   - Cloud VPS
+  - AI Hosting
 featured: true
 cover: "/images/havenso/panelcustomer.png"
 ---
@@ -113,7 +114,7 @@ Hermes mengeksekusi penambahan stok bahan
 ```
 
 ### Deployment & Maintenance
-Sistem dideploy pada server **Linux Cloud VPS** (Ubuntu/Debian LTS) mandiri dengan manajemen proses **PM2**, reverse proxy **Nginx**, port SSH non-standar (Port 4422), serta isolasi variabel lingkungan (*environment variable isolation*).
+Sistem dideploy pada server Linux [Cloud VPS](https://cloudbaik.com) (Ubuntu/Debian LTS) mandiri dengan manajemen proses **PM2**, reverse proxy **Nginx**, port SSH non-standar (Port 4422), serta isolasi variabel lingkungan (*environment variable isolation*).
 
 ---
 
@@ -129,11 +130,17 @@ Pemilihan teknologi untuk Havenso Cafe didasarkan pada prinsip keandalan (*relia
 | **Database & ORM** | SQLite + Prisma ORM | Basis data relasional berbasis file yang sangat cepat untuk deployment single-node, minim overhead koneksi soket, dipadu queries bertipe aman |
 | **AI / Agentic Engine** | Groq LPU + GPT-OSS-120B / Qwen 3.6 27B | Eksekusi inferensi ultra-rendah latensi (sub-300ms) untuk interaksi natural language real-time |
 | **Process Manager** | PM2 | Menjamin continuous execution, auto-restart on crash, dan persistent boot startup |
-| **Infrastructure** | Cloud VPS Linux (Debian/Ubuntu) | Kontrol penuh atas port jaringan, firewall rules, isolasi memori, dan konfigurasi reverse proxy Nginx |
+| **Infrastructure** | [Cloud VPS](https://cloudbaik.com) Linux (Debian/Ubuntu) | Kontrol penuh atas port jaringan, firewall rules, isolasi memori, dan konfigurasi reverse proxy Nginx |
 
 <Callout type="info">
   <strong>Catatan Arsitektur:</strong> Tabel di atas menjelaskan tech stack yang digunakan pada sistem <strong>Havenso Cafe</strong>. Blog tempat Anda membaca artikel ini sendiri dibangun menggunakan arsitektur statis murni: <code>Next.js</code>, <code>TypeScript</code>, <code>Tailwind CSS</code>, <code>MDX</code>, dan di-deploy secara serverless di <code>Vercel</code>.
 </Callout>
+
+### Pertimbangan Komputasi & Kebutuhan AI Hosting
+
+Mengintegrasikan agen AI otonom ke dalam sistem operasional bisnis memerlukan fondasi infrastruktur komputasi yang tangguh. Jika aplikasi web standar hanya menangani kueri CRUD sederhana, sistem yang melibatkan LLM agent secara konstan mengeksekusi streaming token, validasi skema JSON, dan kueri basis data konkuren.
+
+Dalam skenario deployment skala produksi, pemanfaatan solusi [AI Hosting](https://idwebhost.com/ai-hosting) yang dioptimalkan untuk beban kerja machine learning serta penggunaan server berbasis [Cloud VPS](https://cloudbaik.com) berkinerja tinggi memberikan isolasi sumber daya (CPU & RAM) yang stabil. Dengan demikian, latensi respons agen tetap berada di rentang sub-detik tanpa risiko terhambat lonjakan beban saat jam sibuk (*peak hours*).
 
 ---
 
